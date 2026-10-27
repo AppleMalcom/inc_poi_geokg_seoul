@@ -1,7 +1,7 @@
 """Full target-state verification; never included in timed sections."""
 import math
 
-from benchmark_batch import prepare_active_row
+from regional_benchmark.legacy_batch import prepare_active_row
 from regional_benchmark.engine import stream_snapshot
 
 
