@@ -48,6 +48,9 @@ def verify(conn, session, region, method, size):
                     continue  # compared geometrically below
                 if not same(entry["props"].get(key), val):
                     raise AssertionError(f"Property mismatch nf_id={row['nf_id']}, key={key}")
+            unexpected = set(entry["props"]) - set(expected["properties"]) - {"location"}
+            if unexpected:
+                raise AssertionError(f"Unexpected/stale properties for {row['nf_id']}: {sorted(unexpected)}")
             point = entry["loc"]
             if point is None:
                 raise AssertionError(f"Missing location nf_id={row['nf_id']}")
@@ -70,9 +73,13 @@ def verify(conn, session, region, method, size):
         expected = conn.execute("""SELECT count(*) AS n FROM mart.benchmark_inc_poi
                    WHERE change_type='disappear'""").fetchone()["n"]
         conn.commit()
-        actual = session.run("MATCH (p:POITombstone) RETURN count(p) AS n").single()["n"]
-        if actual != expected:
-            raise AssertionError(f"Tombstone count mismatch {actual} vs {expected}")
+        expected_ids = set(conn.execute("""SELECT nf_id::text AS id FROM mart.benchmark_inc_poi
+                   WHERE change_type='disappear'""").fetchall()[i]["id"]
+                   for i in range(expected))
+        conn.commit()
+        actual_ids = set(session.run("MATCH (p:POITombstone) RETURN toString(p.nf_id) AS id").value("id"))
+        if actual_ids != expected_ids:
+            raise AssertionError(f"Tombstone IDs mismatch: missing={len(expected_ids-actual_ids)}, extra={len(actual_ids-expected_ids)}")
         edge_count = session.run("""MATCH (:POITombstone)-[r:IN]-(:adm_dong)
                                     RETURN count(r) AS n""").single()["n"]
         if edge_count:
