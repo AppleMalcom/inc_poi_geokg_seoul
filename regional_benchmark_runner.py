@@ -118,8 +118,8 @@ def main(default_method="both"):
                                 times["total_sec"] = times["apply_sec"] + detect_sec
                             row.update(times)
                             row.update(counters)
-                            row.update({kind+"_count":counts.get(kind,0) for kind in
-                                        ("appear","updated","disappear")})
+                            if method == "incremental" and counts != region_counts:
+                                raise AssertionError(f"Delta counts changed: {counts} != {region_counts}")
                             validation.verify(pg, session, code, method, a.batch_size)
                             row["validation_passed"] = True
                             print(f"  {position}/{len(schedule)} {method} {role}: "
