@@ -1,8 +1,8 @@
 """Shared region-scoped Neo4j operations. Imports original Cypher implementations."""
 import time
 
-import benchmark_batch as batch
-import benchmark_incremental as inc
+from regional_benchmark import legacy_batch as batch
+from regional_benchmark import legacy_incremental as inc
 
 
 def stream_snapshot(conn, snapshot, batch_size, region):
