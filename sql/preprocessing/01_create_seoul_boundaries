@@ -1,0 +1,83 @@
+-- ============================================================
+-- SGIS 전국 행정경계(raw) -> 서울특별시 행정경계(mart)
+-- Source CRS: EPSG:5186
+-- Target CRS: EPSG:5179
+-- ============================================================
+
+BEGIN;
+
+CREATE SCHEMA IF NOT EXISTS mart;
+
+DROP TABLE IF EXISTS mart.bnd_seoul_adm_dong;
+DROP TABLE IF EXISTS mart.bnd_seoul_sigungu;
+DROP TABLE IF EXISTS mart.bnd_seoul_sido;
+
+CREATE TABLE mart.bnd_seoul_sido AS
+SELECT
+    sido_cd,
+    sido_nm,
+    base_date,
+    ST_Multi(
+        ST_Transform(geom, 5179)
+    )::geometry(MultiPolygon, 5179) AS geom
+FROM raw.bnd_sido_pg
+WHERE sido_cd = '11';
+
+ALTER TABLE mart.bnd_seoul_sido
+    ALTER COLUMN sido_cd SET NOT NULL,
+    ADD CONSTRAINT bnd_seoul_sido_pk PRIMARY KEY (sido_cd);
+
+CREATE INDEX bnd_seoul_sido_geom_gix
+    ON mart.bnd_seoul_sido USING gist (geom);
+
+CREATE TABLE mart.bnd_seoul_sigungu AS
+SELECT
+    sigungu_cd,
+    sigungu_nm,
+    base_date,
+    ST_Multi(
+        ST_Transform(geom, 5179)
+    )::geometry(MultiPolygon, 5179) AS geom
+FROM raw.bnd_sigungu_pg
+WHERE LEFT(sigungu_cd, 2) = '11';
+
+ALTER TABLE mart.bnd_seoul_sigungu
+    ALTER COLUMN sigungu_cd SET NOT NULL,
+    ADD CONSTRAINT bnd_seoul_sigungu_pk PRIMARY KEY (sigungu_cd);
+
+CREATE INDEX bnd_seoul_sigungu_geom_gix
+    ON mart.bnd_seoul_sigungu USING gist (geom);
+
+CREATE TABLE mart.bnd_seoul_adm_dong AS
+SELECT
+    adm_cd,
+    adm_nm,
+    base_date,
+    ST_Multi(
+        ST_Transform(geom, 5179)
+    )::geometry(MultiPolygon, 5179) AS geom
+FROM raw.bnd_adm_dong_pg
+WHERE LEFT(adm_cd, 2) = '11';
+
+ALTER TABLE mart.bnd_seoul_adm_dong
+    ALTER COLUMN adm_cd SET NOT NULL,
+    ADD CONSTRAINT bnd_seoul_adm_dong_pk PRIMARY KEY (adm_cd);
+
+CREATE INDEX bnd_seoul_adm_dong_geom_gix
+    ON mart.bnd_seoul_adm_dong USING gist (geom);
+
+ANALYZE mart.bnd_seoul_sido;
+ANALYZE mart.bnd_seoul_sigungu;
+ANALYZE mart.bnd_seoul_adm_dong;
+
+COMMIT;
+
+SELECT 'sido' AS boundary_level, count(*) AS row_count
+FROM mart.bnd_seoul_sido
+UNION ALL
+SELECT 'sigungu', count(*)
+FROM mart.bnd_seoul_sigungu
+UNION ALL
+SELECT 'adm_dong', count(*)
+FROM mart.bnd_seoul_adm_dong;
+
