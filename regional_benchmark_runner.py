@@ -2,6 +2,7 @@
 import argparse
 import csv
 import os
+from datetime import datetime
 from pathlib import Path
 
 import psycopg
@@ -17,6 +18,7 @@ COUNTERS = ("nodes_created", "nodes_deleted", "relationships_created",
             "relationships_deleted", "labels_added", "labels_removed", "properties_set")
 FIELDS = ("region_code", "region_name", "position", "round", "method", "role",
           "t1_count", "t2_count", "appear_count", "updated_count", "disappear_count",
+          "unchanged_count", "change_ratio",
           "detect_sec", "apply_sec", "total_sec", "delete_sec", "load_sec",
           "appear_sec", "updated_sec", "disappear_sec",
           *COUNTERS, "validation_passed", "error")
@@ -47,7 +49,7 @@ def parse(default_method):
     p.add_argument("--method", choices=["batch", "incremental", "both"],
                    default=default_method)
     p.add_argument("--batch-size", type=int, default=1000)
-    p.add_argument("--output", default=str(ROOT / "results" / "regional_benchmark.csv"))
+    p.add_argument("--output", default=str(ROOT / "results" / f"regional_benchmark_{datetime.now():%Y%m%d_%H%M%S}.csv"))
     a = p.parse_args()
     if a.batch_size <= 0 or (a.region and (not a.region.isdigit() or len(a.region) != 5)):
         p.error("Invalid batch size or sigungu code")
@@ -89,13 +91,20 @@ def main(default_method="both"):
                     code, name = d["code"], d["name"]
                     t1_count = delta.count_snapshot(pg, code, "2024")
                     t2_count = delta.count_snapshot(pg, code, "2026")
+                    _, region_counts = delta.generate(pg, code)  # statistics only, outside timing
+                    unchanged = t1_count - region_counts.get("updated", 0) - region_counts.get("disappear", 0)
+                    universe = t1_count + region_counts.get("appear", 0)
+                    change_ratio = (sum(region_counts.values()) / universe) if universe else 0.0
                     schedule = order(i) if a.method == "both" else [a.method]*3
                     for position, method in enumerate(schedule, 1):
                         role = "warmup" if position <= (2 if a.method=="both" else 1) else "measure"
                         row = {"region_code":code,"region_name":name,"position":position,
                                "round": (position+1)//2 if a.method=="both" else position,
                                "method":method, "role":role, "t1_count":t1_count,
-                               "t2_count":t2_count, "validation_passed":False}
+                               "t2_count":t2_count, "validation_passed":False,
+                               "unchanged_count":unchanged, "change_ratio":change_ratio,
+                               **{kind+"_count":region_counts.get(kind,0) for kind in
+                                  ("appear","updated","disappear")}}
                         try:
                             engine.reset(pg, session, code, a.batch_size)
                             validation.verify_baseline(pg, session, code, a.batch_size)
