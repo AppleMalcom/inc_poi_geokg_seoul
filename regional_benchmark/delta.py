@@ -52,7 +52,7 @@ def generate(conn, sigungu_cd):
 
 def districts(conn):
     rows = conn.execute("""SELECT sigungu_cd::text AS code,
-         sigungu_nm AS name FROM mart.bnd_sigungu_pg
+         sigungu_nm AS name FROM mart.bnd_seoul_sigungu
          WHERE left(sigungu_cd::text,2)='11' ORDER BY sigungu_cd""").fetchall()
     conn.commit()
     if len(rows) != 25:
