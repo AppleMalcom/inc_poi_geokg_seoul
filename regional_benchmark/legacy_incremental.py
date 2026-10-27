@@ -8,21 +8,7 @@ KEYS = ("nodes_created", "nodes_deleted", "relationships_created", "relationship
         "labels_added", "labels_removed", "properties_set")
 
 
-def prepare_active_row(row):
-    props = {}
-    for k, value in row.items():
-        if k in EXCLUDED_PROPERTIES:
-            continue
-        if isinstance(value, Decimal):
-            value = float(value)
-        elif isinstance(value, UUID):
-            value = str(value)
-        elif isinstance(value, (date, datetime, time)):
-            value = value.isoformat()
-        props[k] = value
-    return {"nf_id":str(row["nf_id"]), "adm_cd":str(row["adm_cd"]),
-            "longitude":float(row["longitude"]), "latitude":float(row["latitude"]),
-            "properties":props}
+from regional_benchmark.legacy_batch import prepare_active_row
 
 
 def new_counter_accumulator():
