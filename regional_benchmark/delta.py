@@ -10,9 +10,9 @@ WITH t1 AS (
  SELECT coalesce(t1.nf_id,t2.nf_id) AS nf_id,
  CASE WHEN t1.nf_id IS NULL THEN 'appear'
       WHEN t2.nf_id IS NULL THEN 'disappear'
-      WHEN t1.poi_nm IS DISTINCT FROM t2.poi_nm
-        OR t1.poi_cl_dc IS DISTINCT FROM t2.poi_cl_dc
-        OR t1.adm_cd IS DISTINCT FROM t2.adm_cd
+      WHEN (to_jsonb(t1) - 'snapshot' - 'geom' - 'longitude' - 'latitude')
+            IS DISTINCT FROM
+           (to_jsonb(t2) - 'snapshot' - 'geom' - 'longitude' - 'latitude')
         OR ((t1.geom IS NULL) IS DISTINCT FROM (t2.geom IS NULL))
         OR (t1.geom IS NOT NULL AND t2.geom IS NOT NULL
             AND NOT ST_DWithin(t1.geom,t2.geom,0.1))
