@@ -45,7 +45,10 @@ def parse(default_method):
     p.add_argument("--apply", action="store_true")
     p.add_argument("--confirm-destructive-benchmark", action="store_true",
                    help="Acknowledge that benchmark resets remove all POI/Tombstone nodes")
-    p.add_argument("--region", help="Five-digit Seoul sigungu code; omit to run all 25")
+    scope = p.add_mutually_exclusive_group()
+    scope.add_argument("--region", help="Five-digit Seoul sigungu code; omit to run all 25")
+    scope.add_argument("--all-seoul", action="store_true", help="Experiment 1: Seoul-wide POIs in one scope")
+    p.add_argument("--pilot", action="store_true", help="One measured Batch and one Incremental; no warmups")
     p.add_argument("--method", choices=["batch", "incremental", "both"],
                    default=default_method)
     p.add_argument("--batch-size", type=int, default=1000)
@@ -63,7 +66,7 @@ def main(default_method="both"):
     with psycopg.connect(host=os.getenv("PG_HOST"), port=os.getenv("PG_PORT"),
                         dbname=os.getenv("PG_DATABASE"), user=os.getenv("PG_USER"),
                         password=os.getenv("PG_PASSWORD"), row_factory=dict_row) as pg:
-        districts = delta.districts(pg)
+        districts = ([{"code":"11", "name":"서울특별시"}] if a.all_seoul else delta.districts(pg))
         if a.region:
             districts = [d for d in districts if d["code"] == a.region]
             if not districts:
@@ -83,6 +86,8 @@ def main(default_method="both"):
         if unmapped:
             raise RuntimeError(f"Source has {unmapped} unmapped/missing-coordinate POIs")
         delta.initialize(pg)
+        print("[CONFIG] Geometry change threshold: 1.0m; scope=" +
+              ("all Seoul" if a.all_seoul else "district"), flush=True)
         with GraphDatabase.driver(os.getenv("NEO4J_URI"),
                   auth=(os.getenv("NEO4J_USER"), os.getenv("NEO4J_PASSWORD"))) as driver:
             driver.verify_connectivity()
@@ -91,13 +96,18 @@ def main(default_method="both"):
                     code, name = d["code"], d["name"]
                     t1_count = delta.count_snapshot(pg, code, "2024")
                     t2_count = delta.count_snapshot(pg, code, "2026")
+                    print(f"  [PREFLIGHT] {name}: generating 1m delta statistics...", flush=True)
                     _, region_counts = delta.generate(pg, code)  # statistics only, outside timing
+                    print(f"  [PREFLIGHT] delta={region_counts}", flush=True)
                     unchanged = t1_count - region_counts.get("updated", 0) - region_counts.get("disappear", 0)
                     universe = t1_count + region_counts.get("appear", 0)
                     change_ratio = (sum(region_counts.values()) / universe) if universe else 0.0
-                    schedule = order(i) if a.method == "both" else [a.method]*3
+                    schedule = ([ "batch", "incremental" ] if a.pilot and a.method == "both"
+                                else [a.method] if a.pilot
+                                else order(i) if a.method == "both" else [a.method]*3)
                     for position, method in enumerate(schedule, 1):
-                        role = "warmup" if position <= (2 if a.method=="both" else 1) else "measure"
+                        role = ("measure" if a.pilot else
+                                "warmup" if position <= (2 if a.method=="both" else 1) else "measure")
                         row = {"region_code":code,"region_name":name,"position":position,
                                "round": (position+1)//2 if a.method=="both" else position,
                                "method":method, "role":role, "t1_count":t1_count,
