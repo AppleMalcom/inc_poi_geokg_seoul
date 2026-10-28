@@ -32,7 +32,7 @@ The existing `benchmark_batch.py` and `benchmark_incremental.py` entry points ar
 
 ## Caveats
 
-The delta detector compares every Neo4j-mapped source attribute (except geometry, coordinates and snapshot), and compares geometry with a 0.1-meter threshold. This **expands** the original four watched fields (`poi_nm`, `poi_cl_dc`, `adm_cd`, `geom`) to support full attribute equality against Batch. It may therefore generate a larger Updated count than the conference implementation. If the original watched-field definition must remain identical, choose either (a) scope validation to watched fields, or (b) explicitly report this expanded change definition. Do not silently compare these results with conference counts.
+The delta detector uses the **original four watched fields**: `poi_nm`, `poi_cl_dc`, `adm_cd`, and `geom` with a 0.1 m displacement threshold. `nf_id` is the identity key. `adm_nm` is not a watched field because `adm_cd` is the administrative area key. Because unwatched properties may differ between snapshots, Incremental does not guarantee full-property equivalence to a Batch rebuild. Validation checks the active IDs, watched properties, location (0.1 m), and `IN` relationships; any full-property discrepancy must be reported separately, not described as total graph equality.
 
 2024 and 2026 data originate from different providers; provider/schema differences may affect Updated counts. With just two measured runs per method per region, per-region means and standard deviations are descriptive only. Running all 25 districts does not isolate the causal effect of change ratio.
 
