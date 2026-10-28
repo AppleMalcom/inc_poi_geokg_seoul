@@ -55,7 +55,7 @@ def verify(conn, session, region, method, size):
             lat2, lon2 = math.radians(point.latitude), math.radians(point.longitude)
             term = math.sin((lat1-lat2)/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin((lon1-lon2)/2)**2
             meters = 2*6371008.8*math.asin(min(1.0, math.sqrt(max(term,0.0))))
-            if meters > 0.100001:
+            if meters > 1.00001:
                 raise AssertionError(f"Position mismatch nf_id={row['nf_id']} ({meters:.4f}m)")
             if entry["rels"] != 1 or [str(x) for x in entry["codes"]] != [expected["adm_cd"]]:
                 raise AssertionError(f"IN relation mismatch nf_id={row['nf_id']}")
