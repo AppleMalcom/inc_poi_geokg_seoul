@@ -30,10 +30,18 @@ def stream_delta(conn, change_type, batch_size):
 
 
 def reset(conn, session, region, size):
+    started = time.perf_counter()
+    print(f"  [RESET] {region}: deleting prior POIs...", flush=True)
     batch.delete_all_poi_nodes(session, size)
+    print("  [RESET] loading 2024 baseline...", flush=True)
+    loaded = 0
     for rows in stream_snapshot(conn, "2024", size, region):
         session.execute_write(batch.rebuild_upsert_batch,
                               [batch.prepare_active_row(row) for row in rows])
+        loaded += len(rows)
+        if loaded % 10000 < len(rows):
+            print(f"  [RESET] loaded {loaded:,} rows", flush=True)
+    print(f"  [RESET] completed {loaded:,} rows in {time.perf_counter()-started:.1f}s (excluded)", flush=True)
 
 
 def rebuild(conn, session, region, size):
