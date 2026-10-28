@@ -1,4 +1,28 @@
-# Seoul 25-district Batch vs Incremental benchmark (Experiment B)
+# Seoul GeoKG benchmark: Experiments 1 and 2
+
+## Experiment 1: all Seoul (1m geometry change tolerance)
+
+Read-only preflight:
+
+```powershell
+python regional_benchmark_runner.py --all-seoul
+```
+
+First do a pilot with one Batch and one Incremental, no warmups:
+
+```powershell
+python regional_benchmark_runner.py --all-seoul --pilot --apply --confirm-destructive-benchmark
+```
+
+Only after pilot passes, run six citywide runs (warmup once per method, two measured runs per method):
+
+```powershell
+python regional_benchmark_runner.py --all-seoul --apply --confirm-destructive-benchmark
+```
+
+Seoul-wide comparisons use `left(adm_cd,2)='11'` for both 2024 and 2026. Moving across Seoul district boundaries counts as a shared POI, not two unrelated POIs. This is different from Experiment 2. The program deletes ALL POI/Tombstone graph nodes before each run, retaining administrative nodes. Baseline reconstruction of about 1.9 million POIs is outside timing but may be slow. Validation is also outside timing. The final graph remains at T2, not T1. Do not launch simultaneous benchmark processes because they use the same delta table and Neo4j graph.
+
+## Experiment 2: 25 districts
 
 ## Usage
 
@@ -25,14 +49,14 @@ The existing `benchmark_batch.py` and `benchmark_incremental.py` entry points ar
 - The same T1 graph is recreated outside timing before each method.
 - Batch timing includes POI removal and full T2 load.
 - Incremental timing includes SQL change detection / materialization and Neo4j delta application. Delta table truncation and one-time DDL are **excluded**; PostgreSQL detection time includes the INSERT and COMMIT. Timed Neo4j apply includes reading the delta stream.
-- Every run verifies T2 active IDs, mapped properties, location (0.1 m tolerance), `IN` edges, and tombstone counts. Invalid runs are logged as failed and stop the benchmark.
+- Every run verifies T2 active IDs, mapped properties, location (1 m tolerance), `IN` edges, and tombstone counts. Invalid runs are logged as failed and stop the benchmark.
 - GeoKG index and administrative hierarchy should already exist and be identical for both methods.
 - No CPU, memory or storage benchmark is performed.
 - Raw results are appended to `results/regional_benchmark.csv`; do not accidentally mix different experiment configurations in the same CSV.
 
 ## Caveats
 
-The delta detector uses the **original four watched fields**: `poi_nm`, `poi_cl_dc`, `adm_cd`, and `geom` with a 0.1 m displacement threshold. `nf_id` is the identity key. `adm_nm` is not a watched field because `adm_cd` is the administrative area key. Because unwatched properties may differ between snapshots, Incremental does not guarantee full-property equivalence to a Batch rebuild. Validation checks the active IDs, watched properties, location (0.1 m), and `IN` relationships; any full-property discrepancy must be reported separately, not described as total graph equality.
+The delta detector uses the **original four watched fields**: `poi_nm`, `poi_cl_dc`, `adm_cd`, and `geom` with a 1 m displacement threshold. `nf_id` is the identity key. `adm_nm` is not a watched field because `adm_cd` is the administrative area key. Because unwatched properties may differ between snapshots, Incremental does not guarantee full-property equivalence to a Batch rebuild. Validation checks the active IDs, watched properties, location (1 m), and `IN` relationships; any full-property discrepancy must be reported separately, not described as total graph equality.
 
 2024 and 2026 data originate from different providers; provider/schema differences may affect Updated counts. With just two measured runs per method per region, per-region means and standard deviations are descriptive only. Running all 25 districts does not isolate the causal effect of change ratio.
 
