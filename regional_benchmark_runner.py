@@ -2,6 +2,7 @@
 import argparse
 import csv
 import os
+import statistics
 from datetime import datetime
 from pathlib import Path
 
@@ -49,6 +50,8 @@ def parse(default_method):
     scope.add_argument("--region", help="Five-digit Seoul sigungu code; omit to run all 25")
     scope.add_argument("--all-seoul", action="store_true", help="Experiment 1: Seoul-wide POIs in one scope")
     p.add_argument("--pilot", action="store_true", help="One measured Batch and one Incremental; no warmups")
+    p.add_argument("--experiment1-three", action="store_true",
+                   help="Experiment 1: three measured Inc/Batch pairs (previous pilot treated as warmup)")
     p.add_argument("--method", choices=["batch", "incremental", "both"],
                    default=default_method)
     p.add_argument("--batch-size", type=int, default=1000)
@@ -56,6 +59,8 @@ def parse(default_method):
     a = p.parse_args()
     if a.batch_size <= 0 or (a.region and (not a.region.isdigit() or len(a.region) != 5)):
         p.error("Invalid batch size or sigungu code")
+    if a.experiment1_three and (not a.all_seoul or a.pilot or a.method != "both"):
+        p.error("--experiment1-three requires --all-seoul, --method both, and no --pilot")
     if a.apply and not a.confirm_destructive_benchmark:
         p.error("--apply requires --confirm-destructive-benchmark")
     return a
@@ -104,11 +109,14 @@ def main(default_method="both"):
                     unchanged = t1_count - region_counts.get("updated", 0) - region_counts.get("disappear", 0)
                     universe = t1_count + region_counts.get("appear", 0)
                     change_ratio = (sum(region_counts.values()) / universe) if universe else 0.0
-                    schedule = ([ "batch", "incremental" ] if a.pilot and a.method == "both"
+                    schedule = (["incremental", "batch"]*3 if a.experiment1_three
+                                else [ "batch", "incremental" ] if a.pilot and a.method == "both"
                                 else [a.method] if a.pilot
                                 else order(i) if a.method == "both" else [a.method]*3)
+                    summary_times = {"batch": [], "incremental": []}
+                    print(f"  [SCHEDULE] {schedule}", flush=True)
                     for position, method in enumerate(schedule, 1):
-                        role = ("measure" if a.pilot else
+                        role = ("measure" if a.pilot or a.experiment1_three else
                                 "warmup" if position <= (2 if a.method=="both" else 1) else "measure")
                         row = {"region_code":code,"region_name":name,"position":position,
                                "round": (position+1)//2 if a.method=="both" else position,
@@ -146,6 +154,41 @@ def main(default_method="both"):
                             record(Path(a.output), row)
                             raise
                         record(Path(a.output), row)
+                        if role == "measure" and row["validation_passed"]:
+                            summary_times[method].append(times["total_sec"])
+                    if a.experiment1_three:
+                        summary_path = Path(a.output).with_name(
+                            Path(a.output).stem + "_summary.csv"
+                        )
+                        summary_path.parent.mkdir(parents=True, exist_ok=True)
+                        with summary_path.open("w", newline="", encoding="utf-8-sig") as handle:
+                            writer = csv.DictWriter(handle, fieldnames=[
+                                "region_code", "method", "n", "mean_sec",
+                                "sample_stddev_sec", "min_sec", "max_sec",
+                            ])
+                            writer.writeheader()
+                            for measured_method in ("incremental", "batch"):
+                                values = summary_times[measured_method]
+                                if len(values) != 3:
+                                    raise AssertionError(
+                                        f"Expected 3 valid {measured_method} measurements, got {len(values)}"
+                                    )
+                                mean = statistics.mean(values)
+                                sd = statistics.stdev(values)
+                                writer.writerow({
+                                    "region_code": code, "method": measured_method,
+                                    "n": len(values), "mean_sec": f"{mean:.6f}",
+                                    "sample_stddev_sec": f"{sd:.6f}",
+                                    "min_sec": f"{min(values):.6f}",
+                                    "max_sec": f"{max(values):.6f}",
+                                })
+                                print(
+                                    f"  [SUMMARY] {measured_method}: n=3, "
+                                    f"mean={mean:.3f}s, sample SD={sd:.3f}s; "
+                                    f"runs={[round(v, 3) for v in values]}",
+                                    flush=True,
+                                )
+                        print(f"  [SUMMARY] Saved: {summary_path}", flush=True)
     print(f"Raw results: {a.output}")
 
 
