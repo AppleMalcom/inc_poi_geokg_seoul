@@ -1,9 +1,9 @@
-"""Region-specific POI delta detection for benchmark runs."""
+"""District or Seoul-wide POI delta detection for benchmark runs."""
 import time
 
 DETECT_SQL = """
 WITH t1 AS (
- SELECT * FROM mart.poi WHERE snapshot='2024' AND left(adm_cd,5)=%s
+ SELECT * FROM mart.poi WHERE snapshot='2024' AND left(adm_cd,{prefix})=%s
 ), t2 AS (
  SELECT * FROM mart.poi WHERE snapshot='2026' AND left(adm_cd,5)=%s
 ), changes AS (
@@ -15,7 +15,7 @@ WITH t1 AS (
         OR t1.adm_cd IS DISTINCT FROM t2.adm_cd
         OR ((t1.geom IS NULL) IS DISTINCT FROM (t2.geom IS NULL))
         OR (t1.geom IS NOT NULL AND t2.geom IS NOT NULL
-            AND NOT ST_DWithin(t1.geom,t2.geom,0.1))
+            AND NOT ST_DWithin(t1.geom,t2.geom,1.0))
       THEN 'updated'
       ELSE 'no_change' END AS change_type
  FROM t1 FULL JOIN t2 ON t1.nf_id=t2.nf_id
@@ -41,7 +41,8 @@ def generate(conn, sigungu_cd):
     conn.execute("TRUNCATE mart.benchmark_inc_poi")
     conn.commit()
     started = time.perf_counter()
-    conn.execute(DETECT_SQL, (sigungu_cd, sigungu_cd))
+    prefix = 2 if sigungu_cd == "11" else 5
+    conn.execute(DETECT_SQL.format(prefix=prefix), (sigungu_cd, sigungu_cd))
     conn.commit()
     elapsed = time.perf_counter() - started
     counts = conn.execute("""SELECT change_type, count(*) AS n
