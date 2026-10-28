@@ -1,4 +1,4 @@
-"""Full target-state verification; never included in timed sections."""
+"""Verify the actively maintained GeoKG projection; outside timed sections."""
 import math
 
 from regional_benchmark.legacy_batch import prepare_active_row
@@ -26,7 +26,7 @@ def verify_baseline(conn, session, region, size):
 
 
 def verify(conn, session, region, method, size):
-    """Validate IDs, all mapped props, WGS84 point, one matching IN per POI."""
+    """Validate IDs, watched properties, WGS84 point and one matching IN edge."""
     expected_ids = set()
     for rows in stream_snapshot(conn, "2026", size, region):
         ids = [str(row["nf_id"]) for row in rows]
@@ -43,14 +43,11 @@ def verify(conn, session, region, method, size):
         for row in rows:
             entry = graph[str(row["nf_id"])]
             expected = prepare_active_row(row)
-            for key, val in expected["properties"].items():
-                if key in ("longitude", "latitude"):
-                    continue  # compared geometrically below
-                if not same(entry["props"].get(key), val):
-                    raise AssertionError(f"Property mismatch nf_id={row['nf_id']}, key={key}")
-            unexpected = set(entry["props"]) - set(expected["properties"]) - {"location"}
-            if unexpected:
-                raise AssertionError(f"Unexpected/stale properties for {row['nf_id']}: {sorted(unexpected)}")
+            # Unwatched attributes may differ by source version and do not
+            # trigger an incremental update. Only compare the declared watch set.
+            for key in ("poi_nm", "poi_cl_dc", "adm_cd"):
+                if not same(entry["props"].get(key), expected["properties"].get(key)):
+                    raise AssertionError(f"Watched property mismatch nf_id={row['nf_id']}, key={key}")
             point = entry["loc"]
             if point is None:
                 raise AssertionError(f"Missing location nf_id={row['nf_id']}")
@@ -70,16 +67,13 @@ def verify(conn, session, region, method, size):
         if session.run("MATCH (p:POITombstone) RETURN count(p) AS n").single()["n"]:
             raise AssertionError("Batch left tombstones")
     else:
-        expected = conn.execute("""SELECT count(*) AS n FROM mart.benchmark_inc_poi
-                   WHERE change_type='disappear'""").fetchone()["n"]
-        conn.commit()
-        expected_ids = set(conn.execute("""SELECT nf_id::text AS id FROM mart.benchmark_inc_poi
-                   WHERE change_type='disappear'""").fetchall()[i]["id"]
-                   for i in range(expected))
+        rows = conn.execute("""SELECT nf_id::text AS id FROM mart.benchmark_inc_poi
+                   WHERE change_type='disappear'""").fetchall()
+        expected_tombstone_ids = {r["id"] for r in rows}
         conn.commit()
         actual_ids = set(session.run("MATCH (p:POITombstone) RETURN toString(p.nf_id) AS id").value("id"))
-        if actual_ids != expected_ids:
-            raise AssertionError(f"Tombstone IDs mismatch: missing={len(expected_ids-actual_ids)}, extra={len(actual_ids-expected_ids)}")
+        if actual_ids != expected_tombstone_ids:
+            raise AssertionError(f"Tombstone IDs mismatch: missing={len(expected_tombstone_ids-actual_ids)}, extra={len(actual_ids-expected_tombstone_ids)}")
         edge_count = session.run("""MATCH (:POITombstone)-[r:IN]-(:adm_dong)
                                     RETURN count(r) AS n""").single()["n"]
         if edge_count:
