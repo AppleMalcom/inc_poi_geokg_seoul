@@ -6,9 +6,10 @@ from regional_benchmark import legacy_incremental as inc
 
 
 def stream_snapshot(conn, snapshot, batch_size, region):
+    prefix = 2 if region == "11" else 5
     with conn.cursor(name=f"rg_snapshot_{snapshot}_{time.monotonic_ns()}") as c:
-        c.execute("""SELECT * FROM mart.poi WHERE snapshot=%s
-                     AND left(adm_cd,5)=%s ORDER BY nf_id""", (snapshot, region))
+        c.execute(f"""SELECT * FROM mart.poi WHERE snapshot=%s
+                     AND left(adm_cd,{prefix})=%s ORDER BY nf_id""", (snapshot, region))
         while True:
             rows = c.fetchmany(batch_size)
             if not rows:
