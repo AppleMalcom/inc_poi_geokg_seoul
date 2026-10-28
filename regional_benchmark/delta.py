@@ -5,7 +5,7 @@ DETECT_SQL = """
 WITH t1 AS (
  SELECT * FROM mart.poi WHERE snapshot='2024' AND left(adm_cd,{prefix})=%s
 ), t2 AS (
- SELECT * FROM mart.poi WHERE snapshot='2026' AND left(adm_cd,5)=%s
+ SELECT * FROM mart.poi WHERE snapshot='2026' AND left(adm_cd,{prefix})=%s
 ), changes AS (
  SELECT coalesce(t1.nf_id,t2.nf_id) AS nf_id,
  CASE WHEN t1.nf_id IS NULL THEN 'appear'
@@ -62,7 +62,8 @@ def districts(conn):
 
 
 def count_snapshot(conn, region, snapshot):
-    n = conn.execute("""SELECT count(*) AS n FROM mart.poi
-       WHERE snapshot=%s AND left(adm_cd,5)=%s""", (snapshot, region)).fetchone()["n"]
+    prefix = 2 if region == "11" else 5
+    n = conn.execute(f"""SELECT count(*) AS n FROM mart.poi
+       WHERE snapshot=%s AND left(adm_cd,{prefix})=%s""", (snapshot, region)).fetchone()["n"]
     conn.commit()
     return n
