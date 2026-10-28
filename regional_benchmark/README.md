@@ -1,3 +1,25 @@
+## Experiment 2: 25 district automated runs
+
+First verify Gangnam with one Batch and one Incremental run (excluded from full experiment):
+
+```powershell
+python regional_benchmark_runner.py --region 11230 --pilot --apply --confirm-destructive-benchmark
+```
+
+Full Experiment 2 runs 8 times per district: two warmups and 3 valid measurements per method. The district order alternates the starting method. Use a fixed output path so the experiment can resume:
+
+```powershell
+python regional_benchmark_runner.py --experiment2 --output results/experiment_2/regional_raw.csv --apply --confirm-destructive-benchmark
+```
+
+After interruption or an exception, use the same path and --resume to skip already validated runs:
+
+```powershell
+python regional_benchmark_runner.py --experiment2 --output results/experiment_2/regional_raw.csv --resume --apply --confirm-destructive-benchmark
+```
+
+The summary is written to `results/experiment_2/regional_raw_summary.csv` after each completed district. Sample standard deviation uses n-1. Do not reuse a pilot or Experiment 1 CSV. Keep the same snapshot, threshold, Neo4j environment and batch-size when resuming.
+
 # Seoul GeoKG benchmark: Experiments 1 and 2
 
 ## Experiment 1: all Seoul (1m geometry change tolerance)
