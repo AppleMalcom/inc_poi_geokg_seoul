@@ -105,14 +105,17 @@ def main(default_method="both"):
                                "unchanged_count":unchanged, "change_ratio":change_ratio,
                                **{kind+"_count":region_counts.get(kind,0) for kind in
                                   ("appear","updated","disappear")}}
+                        print(f"  [RUN] {position}/{len(schedule)} {method} {role}: resetting baseline", flush=True)
                         try:
                             engine.reset(pg, session, code, a.batch_size)
                             validation.verify_baseline(pg, session, code, a.batch_size)
+                            print(f"  [MEASURE] {method} starting", flush=True)
                             if method == "batch":
                                 times, counters = engine.rebuild(pg, session, code, a.batch_size)
                                 counts = {}
                             else:
                                 detect_sec, counts = delta.generate(pg, code)
+                                print(f"  [DETECT] {detect_sec:.3f}s; changes={counts}", flush=True)
                                 times, counters = engine.apply_delta(pg, session, a.batch_size)
                                 times["detect_sec"] = detect_sec
                                 times["total_sec"] = times["apply_sec"] + detect_sec
@@ -120,6 +123,7 @@ def main(default_method="both"):
                             row.update(counters)
                             if method == "incremental" and counts != region_counts:
                                 raise AssertionError(f"Delta counts changed: {counts} != {region_counts}")
+                            print(f"  [VERIFY] apply={times['apply_sec']:.3f}s, checking graph...", flush=True)
                             validation.verify(pg, session, code, method, a.batch_size)
                             row["validation_passed"] = True
                             print(f"  {position}/{len(schedule)} {method} {role}: "
