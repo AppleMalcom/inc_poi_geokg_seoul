@@ -75,6 +75,8 @@ def main(default_method="both"):
             n1 = delta.count_snapshot(pg, d["code"], "2024")
             n2 = delta.count_snapshot(pg, d["code"], "2026")
             print(f"{d['name']} ({d['code']}): 2024={n1}, 2026={n2}", flush=True)
+            if n1 == 0 or n2 == 0:
+                raise RuntimeError(f"Zero snapshot count for {d['code']}; refusing to benchmark. Verify geographic scope filter.")
         if not a.apply:
             print("Read-only inspection complete. Use --apply --confirm-destructive-benchmark "
                   "ONLY with a dedicated benchmark Neo4j database.")
